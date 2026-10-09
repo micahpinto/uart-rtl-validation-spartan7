@@ -22,7 +22,6 @@ module uart_tb ();
   integer rx_count = 0;   // how many bytes the RX received
   integer i;
 
-  // ---------- The two instances, connected in loopback ----------
   uart_tx #(.CLKS_PER_BIT(c_CLKS_PER_BIT)) UART_TX_INST (
     .i_Clock     (r_Clock),
     .i_Tx_DV     (r_Tx_DV),
@@ -39,39 +38,29 @@ module uart_tb ();
     .o_Rx_Byte   (w_Rx_Byte)
   );
 
-  // ---------- 12 MHz clock ----------
   always #(c_CLOCK_PERIOD_NS/2) r_Clock = !r_Clock;
 
-  // ---------- Waveform dump (delete these 2 lines for console only) ----------
   initial begin
     $dumpfile("dump.vcd");
     $dumpvars(0, uart_tb);
   end
 
-  // ---------- Print each bit at the moment the RX samples it ----------
-  // 3'b010 is the RX's s_RX_DATA_BITS state
   always @(posedge r_Clock)
-    if (UART_RX_INST.r_SM_Main == 3'b010 &&
-        UART_RX_INST.r_Clock_Count == c_CLKS_PER_BIT-1)
-      $display("%0t ns:    RX bit %0d = %b",
-               $time, UART_RX_INST.r_Bit_Index, UART_RX_INST.r_Rx_Data);
+    if (UART_RX_INST.r_SM_Main == 3'b010 && UART_RX_INST.r_Clock_Count == c_CLKS_PER_BIT-1)   // 3'b010 is the RX's s_RX_DATA_BITS state
+      $display("%0t ns:    RX bit %0d = %b",  $time, UART_RX_INST.r_Bit_Index, UART_RX_INST.r_Rx_Data);
 
-  // ---------- Check each byte when the RX says it's valid ----------
-  always @(posedge r_Clock)
+   always @(posedge r_Clock)
     if (w_Rx_DV) begin
       rx_count = rx_count + 1;
       if (w_Rx_Byte === r_Tx_Byte)
-        $display("%0t ns:  Frame %0d: RX byte = 0x%h (%b)  PASS",
-                 $time, rx_count, w_Rx_Byte, w_Rx_Byte);
+        $display("%0t ns:  Frame %0d: RX byte = 0x%h (%b)  PASS", $time, rx_count, w_Rx_Byte, w_Rx_Byte);
       else begin
-        $display("%0t ns:  Frame %0d: RX byte = 0x%h, expected 0x%h  FAIL",
-                 $time, rx_count, w_Rx_Byte, r_Tx_Byte);
+        $display("%0t ns:  Frame %0d: RX byte = 0x%h, expected 0x%h  FAIL", $time, rx_count, w_Rx_Byte, r_Tx_Byte);
         errors = errors + 1;
       end
     end
 
-  // ---------- Task: send one byte through the TX ----------
-  task send_byte(input [7:0] b);
+    task send_byte(input [7:0] b);
     begin
       @(posedge r_Clock);
       r_Tx_DV   <= 1'b1;
@@ -92,7 +81,6 @@ module uart_tb ();
 
     repeat (2 * c_CLKS_PER_BIT) @(posedge r_Clock);   // let the last frame finish
 
-    // Final summary
     $display("----------------------------------");
     if (errors == 0 && rx_count == c_NUM_FRAMES)
       $display("ALL TESTS PASSED (%0d frames)", rx_count);
