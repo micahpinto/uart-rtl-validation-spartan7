@@ -97,7 +97,8 @@ using a self-checking loopback testbench (TX output connected to RX input):
 - Prints each bit to the console at the moment the receiver samples it (bit-by-bit)
 - Compares each received byte with the byte sent and prints PASS/FAIL
 - Prints a final summary
-
+The received byte fills up one bit at a time, LSB first:
+`00000000 → 00000100 → 00001100 → 01001100 → 11001100`
 **Result:** all 3 frames sent and received correctly.
 
 
