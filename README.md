@@ -82,10 +82,16 @@ The receiver's "data valid" pulse directly triggers the transmitter with the
 received byte, and the lower 4 bits of each received byte are shown on LEDs
 LD2–LD5.
 
+For debugging, both UART lines are also mirrored onto Pmod header JA, so they
+can be probed with a logic analyzer without affecting the design:
+- `ja[0]` (JA pin 1): PC → FPGA (`uart_txd_in`)
+- `ja[1]` (JA pin 2): FPGA → PC (`uart_rxd_out`)
 ### Constraints (`constraints/uart_top.xdc`)
-Pin assignments taken from the Digilent Arty S7-25 master XDC: 12 MHz clock
-(F14), USB-UART (R12 out to PC, V12 in from PC) and four LEDs.
-
+Pin assignments taken from the Digilent Arty S7-25 master XDC:
+- 12 MHz clock: F14
+- USB-UART: R12 (out to PC), V12 (in from PC)
+- LEDs: E18, F13, E13, H15
+- Pmod JA: L17 (`ja[0]`), L18 (`ja[1]`)
 ---
 
 ## Simulation
@@ -128,6 +134,20 @@ The port is read from the `UART_PORT` environment variable (default `COM4`):
 - All 256 single-byte tests pass.
 - **The burst test fails:** only 128 of 256 bytes come back (see below).
 - `validation_tests/burst_failure.txt`: pytest output showing the burst failure
+- **Confirmed with a logic analyzer:** both UART lines were mirrored onto Pmod JA
+  (`ja[0]` = PC → FPGA, `ja[1]` = FPGA → PC) and captured in PulseView at 1 MHz
+  with UART decoders. The input line carries every byte back to back
+  (`00 01 02 03 ...`), while the output line carries only `00 02 04 06 ...`,
+  with a gap where each odd byte should be. This proves the bytes are lost inside
+  the FPGA, not on the PC or USB side. The echo of each byte ends at almost the
+  same moment as the next incoming byte, so the next byte's "data valid" pulse
+  arrives while the transmitter is still sending its stop bit.
+
+  ![Logic analyzer: burst overview](validation_tests/logic_analyzer/la_burst_overview.png)
+
+  ![Logic analyzer: first frames, zoomed](validation_tests/logic_analyzer/la_burst_zoom.png)
+
+  Capture file: `validation_tests/logic_analyzer/la_burst.sr` (open with PulseView).
 
 ### What broke and how I found it
 - **Bug:** Echo didn't appear in the terminal, although the LEDs showed the
@@ -150,6 +170,5 @@ The port is read from the `UART_PORT` environment variable (default `COM4`):
   transmitter is idle again, giving the alternating pattern.
 - **Why simulation didn't catch it:** the testbench waited for each byte to finish
   before sending the next, and the single-byte tests never sent data back to back.
-- **Next:** capture the failure with a logic analyzer, then add a FIFO between
-  the receiver and transmitter, and rerun the burst test.
+
 ---
