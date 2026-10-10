@@ -114,13 +114,20 @@ control): each character typed was echoed back, and the LEDs showed its lower
 ### Automated tests
 - `validation_tests/echo_test.py`: sends one byte and checks the echo
 - `validation_tests/echo_all_bytes.py`: sends all 256 byte values and checks every echo
-
 **Result:** all 256 byte values echoed correctly.
+- `validation_tests/test_uart_echo.py`: pytest suite: all 256 byte values as separate tests, plus a burst test : opens the port once (a module-scoped
+fixture), sends each byte value 0x00–0xFF as a separate parametrized test, and
+then sends all 256 bytes back to back as a burst.
+The port is read from the `UART_PORT` environment variable (default `COM4`):
 
-Requires Python with `pyserial` (`pip install pyserial`). Program the board, set
-the COM port in the script, then run:
+    $env:UART_PORT = "COM4"      # Windows PowerShell
+    export UART_PORT=COM4        # Linux / Git Bash
+    python -m pytest -v
 
-    python validation_tests/echo_all_bytes.py
+**Results:**
+- All 256 single-byte tests pass.
+- **The burst test fails:** only 128 of 256 bytes come back (see below).
+- `validation_tests/burst_failure.txt`: pytest output showing the burst failure
 
 ### What broke and how I found it
 - **Bug:** Echo didn't appear in the terminal, although the LEDs showed the
@@ -131,5 +138,18 @@ the COM port in the script, then run:
 - **Cause:** The terminal had RTS/CTS hardware flow control enabled; the design
   has no handshake lines.
 - **Fix:** Flow control set to None.
-
+### Burst test: every other byte is lost
+- **Prediction:** before running the test, I predicted about 50% of bytes would
+  be lost, because the transmitter is still busy when the next byte arrives.
+- **Result:** 128 of 256 bytes returned, exactly every other byte
+  (`00 02 04 06 ...`), confirming the prediction (`validation_tests/burst_failure.txt`).
+- **Cause:** the transmitter only accepts new data in its IDLE state. In a burst,
+  the next byte's one-clock "data valid" pulse arrives while the transmitter is
+  still finishing the previous echo (a full frame plus its CLEANUP cycle), so the
+  pulse is missed and the byte is dropped. The following byte arrives after the
+  transmitter is idle again, giving the alternating pattern.
+- **Why simulation didn't catch it:** the testbench waited for each byte to finish
+  before sending the next, and the single-byte tests never sent data back to back.
+- **Next:** capture the failure with a logic analyzer, then add a FIFO between
+  the receiver and transmitter, and rerun the burst test.
 ---

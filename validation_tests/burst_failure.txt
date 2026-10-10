@@ -1,0 +1,12 @@
+===================================================== FAILURES ======================================================
+____________________________________________________ test_burst _____________________________________________________
+
+  AssertionError: sent 256 bytes, got 128 back
+    assert b'\x00\x02\x0...8\xfa\xfc\xfe' == b'\x00\x01\x0...c\xfd\xfe\xff'
+      
+      At index 1 diff: b'\x02' != b'\x01'
+      Use -v to get more diff
+C:\Python_test_codes\test_uart_echo.py:33: AssertionError: sent 256 bytes, got 128 back
+============================================== short test summary info ==============================================
+FAILED test_uart_echo.py::test_burst - AssertionError: sent 256 bytes, got 128 back
+=========================================== 1 failed, 256 passed in 5.51s ===========================================
