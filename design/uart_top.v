@@ -1,10 +1,11 @@
 `timescale 1ns/1ps
-// The LEDs show the lower 4 bits of the last received byte.
+
 module uart_top (
   input        CLK12MHZ,       // 12 MHz board clock
-  input        uart_txd_in,    // FROM the PC
-  output       uart_rxd_out,   // TO the PC  
-  output [3:0] led
+  input        uart_txd_in,    // FROM the PC 
+  output       uart_rxd_out,   // TO the PC    
+  output [3:0] led,
+  output [1:0] ja              // copies of the UART lines, for the logic analyzer
 );
 
   localparam CLKS_PER_BIT = 104;   // 12,000,000 / 115,200
@@ -34,5 +35,9 @@ module uart_top (
       r_Led <= w_Rx_Byte[3:0];
 
   assign led = r_Led;
+
+  //  mirror both UART lines onto Pmod JA for the logic analyzer
+  assign ja[0] = uart_txd_in;    // PC -> FPGA (bytes going in)
+  assign ja[1] = uart_rxd_out;   // FPGA -> PC (echo coming back)
 
 endmodule
