@@ -119,11 +119,11 @@ control): each character typed was echoed back, and the LEDs showed its lower
 fixture), sends each byte value 0x00–0xFF as a separate parametrized test, and
 then sends all 256 bytes back to back as a burst.
 The port is read from the `UART_PORT` environment variable (default `COM4`):
-
+```
     $env:UART_PORT = "COM4"      # Windows PowerShell
     export UART_PORT=COM4        # Linux / Git Bash
     python -m pytest -v
-
+```
 **Results:**
 - All 256 single-byte tests pass.
 - **The burst test fails:** only 128 of 256 bytes come back (see below).
