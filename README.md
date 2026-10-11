@@ -207,4 +207,4 @@ frequency to 1 MHz fixed it.
 
 The ILA can also be triggered without Python: typing a character in a serial
 terminal such as RealTerm produces the same `w_Rx_DV` pulse.
----
+
