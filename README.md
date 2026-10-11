@@ -170,5 +170,41 @@ The port is read from the `UART_PORT` environment variable (default `COM4`):
   transmitter is idle again, giving the alternating pattern.
 - **Why simulation didn't catch it:** the testbench waited for each byte to finish
   before sending the next, and the single-byte tests never sent data back to back.
+### ILA capture: why the bytes are lost
+To see inside the FPGA, a Vivado ILA (Integrated Logic Analyzer) was inserted
+by marking signals with `(* mark_debug = "true" *)` (the UART lines,
+`w_Rx_DV`, `w_Rx_Byte` and the transmitter state `r_SM_Main`) and using
+Vivado's Set Up Debug wizard. The ILA samples on the 12 MHz design clock, so one
+sample is one clock (83.3 ns) and one UART bit is 104 samples.
 
+**Clean reference: one byte (`A`).** Trigger on `w_Rx_DV`, trigger position 1500,
+so both frames are visible. The incoming `A` arrives on `ja[0]`; the receiver
+signals `w_Rx_DV` in the middle of the stop bit; the transmitter then steps
+through START_BIT (104 clocks), DATA_BITS (832), STOP_BIT (104) and CLEANUP (1),
+sending the same pattern back out on `ja[1]`.
+
+![ILA: single byte, both frames](validation_tests/ila/ila_single_byte_A.png)
+
+Zoomed in on the handover: the echo's start bit begins about half a bit before
+the incoming stop bit ends.
+
+![ILA: handover, zoomed](validation_tests/ila/ila_single_byte_zoom_1.png)
+
+![ILA: handover, zoomed further](validation_tests/ila/ila_single_byte_zoom_2.png)
+
+**The bug, caught at the exact clock.** Triggered on `w_Rx_DV` rising while
+`w_Rx_Byte == 01` (the second byte of the burst). At that moment the transmitter
+is still in `s_TX_STOP_BIT`, sending the stop bit of the previous echo, so the
+one-clock "data valid" pulse is ignored and byte `01` is lost. The same happens
+to every odd byte.
+
+![ILA: burst, TX busy when byte 01 arrives](validation_tests/ila/ila_burst.png)
+
+**Debug lesson:** the ILA was not detected at first ("debug hub core was not
+detected"). The JTAG clock was 15 MHz, but the debug hub runs on the 12 MHz
+design clock and must be at least 2.5× faster than JTAG. Lowering the JTAG
+frequency to 1 MHz fixed it.
+
+The ILA can also be triggered without Python: typing a character in a serial
+terminal such as RealTerm produces the same `w_Rx_DV` pulse.
 ---

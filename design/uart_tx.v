@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+
 module uart_tx
   #(parameter CLKS_PER_BIT = 87)        // clock freq / baud rate
   (
@@ -10,13 +11,13 @@ module uart_tx
    output      o_Tx_Done                // high when the byte is finished
    );
 
-  localparam s_IDLE         = 3'b000;
-  localparam s_TX_START_BIT = 3'b001;
-  localparam s_TX_DATA_BITS = 3'b010;
-  localparam s_TX_STOP_BIT  = 3'b011;
-  localparam s_CLEANUP      = 3'b100;
+  localparam s_IDLE         = 3'b000;   
+  localparam s_TX_START_BIT = 3'b001;   
+  localparam s_TX_DATA_BITS = 3'b010;   
+  localparam s_TX_STOP_BIT  = 3'b011;   
+  localparam s_CLEANUP      = 3'b100;   
 
-  reg [2:0]                      r_SM_Main     = 0;
+  (* mark_debug = "true" *) reg [2:0] r_SM_Main = 0;   // ILA: TX state machine
   reg [$clog2(CLKS_PER_BIT)-1:0] r_Clock_Count = 0;
   reg [2:0]                      r_Bit_Index   = 0;
   reg [7:0]                      r_Tx_Data     = 0;
