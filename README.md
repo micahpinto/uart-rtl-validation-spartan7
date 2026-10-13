@@ -84,8 +84,8 @@ LD2–LD5.
 
 For debugging, both UART lines are also mirrored onto Pmod header JA, so they
 can be probed with a logic analyzer without affecting the design:
-- `ja[0]` (JA pin 1): PC → FPGA (`uart_txd_in`)
-- `ja[1]` (JA pin 2): FPGA → PC (`uart_rxd_out`)
+- `ja[0]` (JA pin 1): PC to FPGA (`uart_txd_in`)
+- `ja[1]` (JA pin 2): FPGA to PC (`uart_rxd_out`)
 ### Constraints (`constraints/uart_top.xdc`)
 Pin assignments taken from the Digilent Arty S7-25 master XDC:
 - 12 MHz clock: F14
@@ -207,4 +207,47 @@ frequency to 1 MHz fixed it.
 
 The ILA can also be triggered without Python: typing a character in a serial
 terminal such as RealTerm produces the same `w_Rx_DV` pulse.
+### Baud-rate margin test
+The FPGA was kept at 115,200 baud while the PC talked at deliberately wrong
+speeds. At each speed, all 256 byte values were sent one at a time and the echoes
+checked (`validation_tests/baud_margin/`).
 
+**Prediction:** from the bit timing (each sample drifts further from the middle
+of its bit; the last data bit, D7, at 8.5 bit periods, fails first), the echo
+should fail beyond about ±5–6%.
+
+**Result:** the echo works from **109,000 to 121,500 baud (−5.4% to +5.5%)**,
+almost symmetric, close to the prediction.
+
+| Speed (baud) | Error | Correct |
+|---|---|---|
+| 108,500 | −5.8% | 140 / 256 |
+| 109,000 | −5.4% | 256 / 256 |
+| 121,500 | +5.5% | 256 / 256 |
+| 122,000 | +5.9% | 177 / 256 |
+
+Full logs: `baud_sweep_coarse.txt`, `baud_sweep_fine.txt`, `baud_sweep.csv`.
+
+**Which receiver failed?** The echo has two receivers: the FPGA's (PC to FPGA)
+and the PC's (FPGA to PC). The ILA's `w_Rx_Byte` shows what the FPGA received;
+Python shows what the PC received.
+
+| Speed | Byte sent | FPGA received (ILA) | PC received | Receiver that failed |
+|---|---|---|---|---|
+| 107,000 | `00` | `00` | `80` | PC's: its D7 sample landed on the echo's stop bit |
+| 108,500 | `40` | `C0` | `C0` | FPGA's: its D7 sample landed in D6 |
+
+![ILA: 107,000 baud, FPGA receives 00 correctly](validation_tests/baud_margin/onebyte_capture1_baud_107000.png)
+
+![ILA: 108,500 baud, FPGA receives C0 instead of 40](validation_tests/baud_margin/onebyte_capture2_baud_108500.png)
+
+**What I got wrong:** I first predicted that every slow-side failure came from the
+FPGA copying D6 into D7. The fine sweep showed `00 → 80` at 107,000, which that
+explanation can't produce. The ILA showed the FPGA had received `00` correctly,
+so the error was in the PC's receiver reading the echo.
+
+**Error masking:** the two receivers' errors can cancel. For example, `0x80` sent
+at 104,000: the FPGA receives `00` (D7 copies D6), and the PC then reads the
+echo's stop bit into D7, giving back `80`. Python reports a pass even though the
+FPGA received the wrong byte. A passing end-to-end test doesn't prove every stage
+worked; only looking inside (ILA) shows it.
