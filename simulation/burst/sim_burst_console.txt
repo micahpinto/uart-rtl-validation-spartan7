@@ -1,0 +1,11 @@
+166174000 ns: echo 1 = 0x00
+253008000 ns: echo 2 = 0x01
+426593000 ns: echo 3 = 0x03
+513427000 ns: echo 4 = 0x04
+687012000 ns: echo 5 = 0x06
+773846000 ns: echo 6 = 0x07
+----------------------------------
+Sent 8 bytes back to back, received 6 echoes
+BURST TEST FAILED
+----------------------------------
+$finish called at time : 954861111 ps
