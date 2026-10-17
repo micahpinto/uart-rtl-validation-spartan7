@@ -8,14 +8,15 @@ module uart_tx
    input [7:0] i_Tx_Byte,               // byte to send
    output      o_Tx_Active,             // high while sending
    output reg  o_Tx_Serial,             // the serial line (registered output)
-   output      o_Tx_Done                // high when the byte is finished
+   output      o_Tx_Done,               // high when the byte is finished
+   output      o_Tx_Ready               // high only in IDLE: can accept a new byte
    );
 
-  localparam s_IDLE         = 3'b000;   
-  localparam s_TX_START_BIT = 3'b001;   
-  localparam s_TX_DATA_BITS = 3'b010;   
-  localparam s_TX_STOP_BIT  = 3'b011;   
-  localparam s_CLEANUP      = 3'b100;   
+  localparam s_IDLE         = 3'b000;
+  localparam s_TX_START_BIT = 3'b001;
+  localparam s_TX_DATA_BITS = 3'b010;
+  localparam s_TX_STOP_BIT  = 3'b011;
+  localparam s_CLEANUP      = 3'b100;
 
   (* mark_debug = "true" *) reg [2:0] r_SM_Main = 0;   // ILA: TX state machine
   reg [$clog2(CLKS_PER_BIT)-1:0] r_Clock_Count = 0;
@@ -119,5 +120,6 @@ module uart_tx
 
   assign o_Tx_Active = r_Tx_Active;
   assign o_Tx_Done   = r_Tx_Done;
+  assign o_Tx_Ready  = (r_SM_Main == s_IDLE);   // only IDLE accepts a new byte
 
 endmodule

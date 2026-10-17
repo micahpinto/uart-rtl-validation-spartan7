@@ -1,0 +1,13 @@
+166258000 ps: echo 1 = 0x00
+253092000 ps: echo 2 = 0x01
+339926000 ps: echo 3 = 0x02
+426760000 ps: echo 4 = 0x03
+513594000 ps: echo 5 = 0x04
+600428000 ps: echo 6 = 0x05
+687262000 ps: echo 7 = 0x06
+774096000 ps: echo 8 = 0x07
+----------------------------------
+Sent 8 bytes back to back, received 8 echoes, 0 wrong
+Most bytes waiting in the FIFO at once: 1
+BURST TEST PASSED
+----------------------------------

@@ -1,0 +1,12 @@
+PASS: starts empty
+PASS: count = 3 after 3 writes
+PASS: empty after reading all 3
+PASS: full after 4 writes
+PASS: write when full is refused
+PASS: empty after reading all 4
+PASS: read when empty is refused
+PASS: write + read same clock: count unchanged
+PASS: empty at the end
+----------------------------------
+ALL FIFO TESTS PASSED
+----------------------------------
