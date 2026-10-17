@@ -7,6 +7,12 @@ self-checking testbench, then validated on hardware with automated Python tests.
 The hardware design is an echo: bytes sent from the PC are received by the FPGA,
 shown on the LEDs, and transmitted straight back.
 
+The project contains two designs:
+- **UART transmitter and receiver** (`design/uart_tx.v`, `design/uart_rx.v`)
+- **Synchronous FIFO** (`design/fifo.v`), designed and unit-tested on its own, then
+  placed between the receiver and the transmitter so bytes sent back to back are
+  never lost.
+
 ## Specification
 - **Board:** Digilent Arty S7-25 (AMD Spartan-7 XC7S25)
 - **Clock:** 12 MHz (onboard oscillator)
@@ -76,11 +82,23 @@ Two-flop synchronizer, then a state machine (IDLE, START_BIT, DATA_BITS,
 STOP_BIT, CLEANUP) that detects the start bit, samples each data bit in its
 middle, and outputs the byte with a one-cycle "data valid" pulse.
 
+### FIFO (design/fifo.v)
+A synchronous FIFO (one clock): 16 slots of 8 bits, a write pointer, a read pointer and a count. Writes are refused when it is full and reads when it is empty, so the FIFO protects itself. The front byte is always visible on o_Rd_Data (first-word fall-through), and a read only moves the read pointer. WIDTH and DEPTH are parameters; DEPTH must be a power of 2 so the pointers wrap around by themselves.
+
 ### Echo wrapper (`design/uart_top.v`)
-Connects the board's clock and USB-UART pins to the receiver and transmitter.
+Connects the board's clock and USB-UART pins to the receiver and transmitter. The lower 4 bits of each received byte are shown on LEDs LD2–LD5. The wrapper was built in two versions:
+**Version 1: direct echo (git tag `v1.0-no-fifo`)**
+PC - UART RX - UART TX - PC
 The receiver's "data valid" pulse directly triggers the transmitter with the
-received byte, and the lower 4 bits of each received byte are shown on LEDs
-LD2–LD5.
+received byte. This version passed every single-byte test (all 256 values), and
+the burst test later showed its limit: bytes sent back to back were lost
+(see "Burst test" below)
+**Version 2: echo with a FIFO (git tag `v1.1-fifo`, current)**
+PC - UART RX - FIFO - UART TX - PC
+- The receiver's "data valid" pulse writes the received byte into the FIFO.
+- A byte moves from the FIFO to the transmitter only when the FIFO is not empty
+  **and** the transmitter is ready (a valid/ready handshake). The same signal
+  starts the transmitter and reads the FIFO, so both happen in the same clock.
 
 For debugging, both UART lines are also mirrored onto Pmod header JA, so they
 can be probed with a logic analyzer without affecting the design:
@@ -106,7 +124,18 @@ using a self-checking loopback testbench (TX output connected to RX input):
 The received byte fills up one bit at a time, LSB first:
 `00000000 → 00000100 → 00001100 → 01001100 → 11001100`
 **Result:** all 3 frames sent and received correctly.
+### Later testbenches
 
+Written after the first hardware tests, to study and fix the burst bug
+(details in "Burst test" below):
+
+| Testbench | What it does | Result |
+|---|---|---|
+| `simulation/burst/uart_burst_tb.v` | Sends 8 bytes back to back into the Version 1 echo (no FIFO) and records every echo | 6 of 8 echoes: bug reproduced |
+| `simulation/fifo/fifo_tb.v` | Tests the FIFO on its own: order, full, empty, write when full, read when empty, write and read in the same clock | 9 of 9 checks pass |
+| `simulation/burst_fifo/uart_burst_tb.v` | The burst test again on Version 2 (with the FIFO), checking every echo's value | 8 of 8 echoes, 0 wrong |
+
+Then Ctrl+S.
 
 ---
 
@@ -132,22 +161,12 @@ The port is read from the `UART_PORT` environment variable (default `COM4`):
 ```
 **Results:**
 - All 256 single-byte tests pass.
-- **The burst test fails:** only 128 of 256 bytes come back (see below).
-- `validation_tests/burst_failure.txt`: pytest output showing the burst failure
-- **Confirmed with a logic analyzer:** both UART lines were mirrored onto Pmod JA
-  (`ja[0]` = PC → FPGA, `ja[1]` = FPGA → PC) and captured in PulseView at 1 MHz
-  with UART decoders. The input line carries every byte back to back
-  (`00 01 02 03 ...`), while the output line carries only `00 02 04 06 ...`,
-  with a gap where each odd byte should be. This proves the bytes are lost inside
-  the FPGA, not on the PC or USB side. The echo of each byte ends at almost the
-  same moment as the next incoming byte, so the next byte's "data valid" pulse
-  arrives while the transmitter is still sending its stop bit.
+- **The burst test first failed:** only 128 of 256 bytes came back (see below).
+  `validation_tests/burst_failure.txt` has the pytest output.
+- **After the FIFO fix: 257 passed** (256 single-byte tests + the burst test).
+  `validation_tests/pytest_fifo_output.txt` and `validation_tests/results_fifo.xml`
+  (JUnit XML) have the full results.
 
-  ![Logic analyzer: burst overview](validation_tests/logic_analyzer/la_burst_overview.png)
-
-  ![Logic analyzer: first frames, zoomed](validation_tests/logic_analyzer/la_burst_zoom.png)
-
-  Capture file: `validation_tests/logic_analyzer/la_burst.sr` (open with PulseView).
 
 ### What broke and how I found it
 - **Bug:** Echo didn't appear in the terminal, although the LEDs showed the
@@ -170,6 +189,19 @@ The port is read from the `UART_PORT` environment variable (default `COM4`):
   transmitter is idle again, giving the alternating pattern.
 - **Why simulation didn't catch it:** the testbench waited for each byte to finish
   before sending the next, and the single-byte tests never sent data back to back.
+
+**Confirmed with a logic analyzer:** both UART lines (mirrored onto Pmod JA) were
+captured in PulseView at 1 MHz with UART decoders. The input line carries every
+byte back to back (`00 01 02 03 ...`), while the output line carries only
+`00 02 04 06 ...`, with a gap where each odd byte should be. This proves the bytes
+are lost inside the FPGA, not on the PC or USB side.
+
+![Logic analyzer: burst overview](validation_tests/logic_analyzer/la_burst_overview.png)
+
+![Logic analyzer: first frames, zoomed](validation_tests/logic_analyzer/la_burst_zoom.png)
+
+Capture file: `validation_tests/logic_analyzer/la_burst.sr` (open with PulseView).
+
 ### ILA capture: why the bytes are lost
 To see inside the FPGA, a Vivado ILA (Integrated Logic Analyzer) was inserted
 by marking signals with `(* mark_debug = "true" *)` (the UART lines,
@@ -207,6 +239,101 @@ frequency to 1 MHz fixed it.
 
 The ILA can also be triggered without Python: typing a character in a serial
 terminal such as RealTerm produces the same `w_Rx_DV` pulse.
+
+### Reproducing the bug in simulation
+Before fixing anything, I recreated the bug in simulation, where every signal is
+visible and a change takes seconds instead of a rebuild. The burst testbench
+(`simulation/burst/uart_burst_tb.v`) plays the PC: one process sends 8 bytes
+(`00`–`07`) with no gap between them, a second one listens to the echoes at the
+same time, and a third stops the run and prints the result.
+
+**Result:** 6 of 8 echoes, `00 01 03 04 06 07`. Bytes `02` and `05` were lost
+(`simulation/burst/sim_burst_console.txt`).
+
+![Simulation: burst overview](simulation/burst/sim_burst_overview.png)
+
+**Root cause, counted in clocks:**
+- The transmitter needs **1,042 clocks** from accepting one byte to being able to
+  accept the next: 10 bits × 104 clocks, plus one clock in CLEANUP and one in IDLE.
+- At exactly 115,200 baud the testbench sends a byte every **1,041.67 clocks**.
+  The FPGA only counts whole clocks, so the gaps between "data valid" pulses go
+  1,042, 1,042, **1,041**, and repeat.
+- On a 1,041 gap the pulse arrives **one clock too early**, while the transmitter
+  is in CLEANUP, and it is ignored. So every third byte is lost.
+
+At 257 µs, byte `02` arrives while the transmitter is still finishing byte `01`.
+The pulse lands in CLEANUP (`r_SM_Main = 100`), and `r_Tx_Data` stays `01`:
+
+![Simulation: byte 02 lost](simulation/burst/sim_burst_lost_byte02.png)
+
+The transmitter goes straight from byte `01` to byte `03`:
+
+![Simulation: skip from 01 to 03](simulation/burst/sim_burst_skip_01_to_03.png)
+
+**Why hardware lost every other byte, not every third:** the board's USB-UART
+chip most likely runs at 115,385 baud, the same as the FPGA (12 MHz / 104). That
+is a byte every **1,040 clocks**, always **2 clocks too early**. This also matches
+the ILA capture above, where the pulse arrived while the transmitter was still in
+STOP_BIT.
+
+**Lesson:** the bug is a race of 1 to 2 clock cycles out of 1,042. How many bytes
+are lost depends on tiny baud differences, so the fix has to remove the race, not
+tune the timing.
+
+### The fix: a FIFO between RX and TX
+The receiver now writes every byte into a 16-slot FIFO, and the transmitter takes
+bytes out of it (see Design above). A byte that arrives while the transmitter is
+busy waits in the FIFO instead of being lost.
+
+- **Handshake:** a byte moves only when the FIFO has one (*valid*: not empty) and
+  the transmitter can take it (*ready*: `o_Tx_Ready`). One signal starts the
+  transmitter and reads the FIFO in the same clock, so they can't get out of step.
+- **Why `o_Tx_Ready` and not `!o_Tx_Active`:** `o_Tx_Active` already drops when
+  the transmitter enters CLEANUP, one clock before IDLE. Using it, the FIFO would
+  hand over a byte during CLEANUP, the transmitter would ignore it, and the byte
+  would be lost exactly as before. Readiness has to come from the state that
+  actually accepts data.
+- **Why a handshake alone isn't enough:** a handshake only works if the sender
+  can wait. Here it can't: the receiver's "data valid" is a one-clock pulse, its
+  byte register is overwritten by the next byte, and the PC can't be told to wait
+  (no flow control). So the byte needs somewhere to wait, and that is the FIFO.
+
+**FIFO unit test (`simulation/fifo/fifo_tb.v`).** The FIFO was tested on its own
+first, with `DEPTH = 4` so it fills quickly:
+first-in-first-out order, full flag, a write when full is refused (the extra byte
+`EE` never comes out), a read when empty is refused, and a write and read in the
+same clock leave the count unchanged. The pointers also wrap around during the
+test. **Result: 9 of 9 checks pass** (`simulation/fifo/fifo_tb_console.txt`).
+
+![FIFO unit test waveform](simulation/fifo/fifo_tb_waveform.png)
+
+### Result after the fix
+**Simulation** (`simulation/burst_fifo/`): the burst testbench now also checks
+every echo's value, not just the count. **8 of 8 echoes, `00`–`07`, 0 wrong.**
+The FIFO never holds more than 1 byte: each byte waits only about 2 clocks.
+
+![Simulation with FIFO: burst overview](simulation/burst_fifo/sim_fifo_burst_overview.png)
+
+At 257 µs, the moment byte `02` used to be lost: the FIFO count goes 0 → 1 (byte
+`02` waits), the transmitter reaches IDLE, the handshake fires, the count goes
+back to 0 and `r_Tx_Data` becomes `02`.
+
+![Simulation with FIFO: byte 02 waits](simulation/burst_fifo/sim_fifo_byte02_waits.png)
+
+**Hardware:** pytest **257 passed** in 4.4 s, including the burst test that had
+lost half the bytes.
+
+**Logic analyzer:** the echo line now carries every byte, back to back, with no
+gaps. Each echo starts about half a bit before its incoming frame ends, because
+the receiver reports the byte in the middle of the stop bit: a latency of 9.5 bits
+(≈ 82 µs).
+
+![Logic analyzer with FIFO: every byte echoed](validation_tests/logic_analyzer/la_burst_fifo.png)
+
+Capture file: `validation_tests/logic_analyzer/la_burst_fifo.sr`.
+
+Git tags mark both versions: `v1.0-no-fifo` (the bug) and `v1.1-fifo` (the fix).
+
 ### Baud-rate margin test
 The FPGA was kept at 115,200 baud while the PC talked at deliberately wrong
 speeds. At each speed, all 256 byte values were sent one at a time and the echoes
