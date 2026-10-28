@@ -53,7 +53,9 @@ Both the transmitter and receiver count `CLKS_PER_BIT` cycles for each bit.
 
 - **Synchronization:** the RX input comes from outside the FPGA's clock domain,
   so it passes through two flip-flops before use. This prevents metastability,
-  at the cost of 2 clock cycles of latency.
+  at the cost of 2 clock cycles of latency. Both flip-flops are marked
+  `(* ASYNC_REG = "TRUE" *)`, so Vivado places them next to each other and
+  treats them as a synchronizer.
 - **Start-bit detection:** when the line goes low, the receiver waits half a bit
   period and checks the line is still low. If it isn't, it was a glitch and is
   ignored.
@@ -239,6 +241,12 @@ frequency to 1 MHz fixed it.
 
 The ILA can also be triggered without Python: typing a character in a serial
 terminal such as RealTerm produces the same `w_Rx_DV` pulse.
+
+**Final design:** the ILA was a debugging tool, so it was removed from the final
+design (git tag `v1.2-clean`): no `mark_debug` attributes and no debug cores in the
+XDC. After the cleanup the design uses 67 LUTs, 64 flip-flops and no block RAM,
+and pytest still passes **257 / 257**. The ILA captures above were made with the
+earlier versions (`v1.0-no-fifo` and `v1.1-fifo`).
 
 ### Reproducing the bug in simulation
 Before fixing anything, I recreated the bug in simulation, where every signal is
