@@ -18,7 +18,7 @@ module uart_tx
   localparam s_TX_STOP_BIT  = 3'b011;
   localparam s_CLEANUP      = 3'b100;
 
-  (* mark_debug = "true" *) reg [2:0] r_SM_Main = 0;   // ILA: TX state machine
+  reg [2:0] r_SM_Main = 0;   // TX state machine
   reg [$clog2(CLKS_PER_BIT)-1:0] r_Clock_Count = 0;
   reg [2:0]                      r_Bit_Index   = 0;
   reg [7:0]                      r_Tx_Data     = 0;

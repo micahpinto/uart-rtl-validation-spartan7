@@ -7,16 +7,16 @@
 // Signals marked mark_debug are kept for the Vivado ILA.
 module uart_top (
   input        CLK12MHZ,                                // 12 MHz board clock
-  (* mark_debug = "true" *) input  uart_txd_in,         // ILA: PC to FPGA line
-  (* mark_debug = "true" *) output uart_rxd_out,        // ILA: FPGA to PC line
+  input  uart_txd_in,         // PC to FPGA line
+  output uart_rxd_out,        // FPGA to PC line
   output [3:0] led,
   output [1:0] ja                                       // copies of the UART lines, for the logic analyzer
 );
 
   localparam CLKS_PER_BIT = 104;   // 12,000,000 / 115,200
 
-  (* mark_debug = "true" *) wire       w_Rx_DV;          // ILA: RX's "byte ready" pulse
-  (* mark_debug = "true" *) wire [7:0] w_Rx_Byte;        // ILA: the received byte
+   wire       w_Rx_DV;          // RX's "byte ready" pulse
+   wire [7:0] w_Rx_Byte;        // the received byte
 
   wire       w_Fifo_Empty;      // 1 = no byte waiting
   wire       w_Fifo_Full;       // 1 = no room (not used yet)

@@ -14,8 +14,8 @@ module uart_rx
   localparam s_RX_STOP_BIT  = 3'b011;
   localparam s_CLEANUP      = 3'b100;
 
-  reg                            r_Rx_Data_R   = 1'b1;
-  reg                            r_Rx_Data     = 1'b1;
+  (* ASYNC_REG = "TRUE" *) reg   r_Rx_Data_R   = 1'b1;   // synchronizer flop 1
+  (* ASYNC_REG = "TRUE" *) reg   r_Rx_Data     = 1'b1;   // synchronizer flop 2
 
   reg [$clog2(CLKS_PER_BIT)-1:0] r_Clock_Count = 0;
   reg [2:0]                      r_Bit_Index   = 0;
